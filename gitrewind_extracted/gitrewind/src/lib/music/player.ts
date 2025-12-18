@@ -143,6 +143,26 @@ export class MusicPlayer {
     return this.isPlaying;
   }
 
+  getSections(): Array<{ name: string; startTime: number; duration: number }> {
+    if (!this.composition) return [];
+    return this.composition.sections.map(s => ({
+      name: s.name,
+      startTime: s.startTime,
+      duration: s.duration,
+    }));
+  }
+
+  getCurrentSection(): string | null {
+    if (!this.composition) return null;
+    const currentTime = this.getCurrentTime();
+    for (const section of this.composition.sections) {
+      if (currentTime >= section.startTime && currentTime < section.startTime + section.duration) {
+        return section.name;
+      }
+    }
+    return null;
+  }
+
   setVolume(volume: number): void {
     Tone.getDestination().volume.value = volume <= 0 ? -Infinity : 20 * Math.log10(volume);
   }

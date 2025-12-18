@@ -9,7 +9,7 @@ import { ArtCanvas } from '@/components/art/ArtCanvas';
 import { StatsPanel } from './StatsPanel';
 import { Controls } from './Controls';
 import { ShareDialog, ExportDialog } from '@/components/export';
-import { ErrorBoundary } from '@/components/ui';
+import { ErrorBoundary, ToastContainer } from '@/components/ui';
 import { useKeyboardShortcuts, KEYBOARD_SHORTCUTS } from '@/hooks';
 import { useUIStore } from '@/stores/ui';
 import { eventBus } from '@/lib/core/events';
@@ -223,6 +223,9 @@ function ExperienceContent({ params, model }: ExperienceViewProps) {
       {/* Dialogs */}
       <ShareDialog params={params} />
       <ExportDialog params={params} />
+
+      {/* Toast notifications */}
+      <ToastContainer />
     </div>
   );
 }

@@ -1,9 +1,17 @@
 // Three.js Network Renderer
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import type { SimulationNode, GraphEdge } from '@/types/graph';
+import type { SimulationNode, GraphEdge, GraphNode } from '@/types/graph';
 import type { UnifiedParameters } from '@/types/parameters';
 import { hslToRGB } from '@/lib/utils/color';
+
+export interface NodeHoverCallback {
+  (node: GraphNode | null, screenPosition: { x: number; y: number } | null): void;
+}
+
+export interface NodeClickCallback {
+  (node: GraphNode): void;
+}
 
 export class NetworkRenderer {
   private container: HTMLElement;
@@ -17,8 +25,23 @@ export class NetworkRenderer {
   private pulseIntensity = 0;
   private disposed = false;
 
+  // Raycasting for interaction
+  private raycaster: THREE.Raycaster;
+  private mouse: THREE.Vector2;
+  private nodesData: SimulationNode[] = [];
+  private hoveredNodeIndex: number | null = null;
+  private highlightMesh: THREE.Mesh | null = null;
+
+  // Callbacks
+  private onNodeHover: NodeHoverCallback | null = null;
+  private onNodeClick: NodeClickCallback | null = null;
+
   constructor(container: HTMLElement) {
     this.container = container;
+
+    // Initialize raycaster
+    this.raycaster = new THREE.Raycaster();
+    this.mouse = new THREE.Vector2();
 
     // Scene
     this.scene = new THREE.Scene();
@@ -53,12 +76,107 @@ export class NetworkRenderer {
     pointLight.position.set(50, 50, 50);
     this.scene.add(pointLight);
 
+    // Create highlight mesh for hovered nodes
+    const highlightGeometry = new THREE.RingGeometry(1.2, 1.5, 32);
+    const highlightMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.8,
+      side: THREE.DoubleSide,
+    });
+    this.highlightMesh = new THREE.Mesh(highlightGeometry, highlightMaterial);
+    this.highlightMesh.visible = false;
+    this.scene.add(this.highlightMesh);
+
     // Handle resize
     this.handleResize = this.handleResize.bind(this);
     window.addEventListener('resize', this.handleResize);
+
+    // Handle mouse events
+    this.handleMouseMove = this.handleMouseMove.bind(this);
+    this.handleClick = this.handleClick.bind(this);
+    this.renderer.domElement.addEventListener('mousemove', this.handleMouseMove);
+    this.renderer.domElement.addEventListener('click', this.handleClick);
+  }
+
+  // Set callbacks for node interactions
+  setNodeCallbacks(onHover: NodeHoverCallback | null, onClick: NodeClickCallback | null): void {
+    this.onNodeHover = onHover;
+    this.onNodeClick = onClick;
+  }
+
+  private handleMouseMove(event: MouseEvent): void {
+    if (this.disposed || !this.nodesMesh) return;
+
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+    // Raycast against nodes
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+    const intersects = this.raycaster.intersectObject(this.nodesMesh);
+
+    if (intersects.length > 0) {
+      const instanceId = intersects[0]!.instanceId;
+      if (instanceId !== undefined && instanceId !== this.hoveredNodeIndex) {
+        this.hoveredNodeIndex = instanceId;
+        const node = this.nodesData[instanceId];
+        if (node && this.onNodeHover) {
+          this.onNodeHover(node, { x: event.clientX, y: event.clientY });
+        }
+        // Update highlight
+        this.updateHighlight(node);
+      }
+    } else if (this.hoveredNodeIndex !== null) {
+      this.hoveredNodeIndex = null;
+      if (this.onNodeHover) {
+        this.onNodeHover(null, null);
+      }
+      if (this.highlightMesh) {
+        this.highlightMesh.visible = false;
+      }
+    }
+  }
+
+  private handleClick(event: MouseEvent): void {
+    if (this.disposed || !this.nodesMesh) return;
+
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+    const intersects = this.raycaster.intersectObject(this.nodesMesh);
+
+    if (intersects.length > 0) {
+      const instanceId = intersects[0]!.instanceId;
+      if (instanceId !== undefined) {
+        const node = this.nodesData[instanceId];
+        if (node && this.onNodeClick) {
+          this.onNodeClick(node);
+        }
+      }
+    }
+  }
+
+  private updateHighlight(node: SimulationNode | undefined): void {
+    if (!this.highlightMesh || !node) {
+      if (this.highlightMesh) this.highlightMesh.visible = false;
+      return;
+    }
+
+    // Position and scale the highlight ring
+    const scale = node.size * 3 * 1.5;
+    this.highlightMesh.position.set(node.x, node.y, node.z);
+    this.highlightMesh.scale.setScalar(scale);
+    this.highlightMesh.lookAt(this.camera.position);
+    this.highlightMesh.visible = true;
   }
 
   setNodes(nodes: SimulationNode[], params: UnifiedParameters): void {
+    // Store nodes data for hover/click detection
+    this.nodesData = [...nodes];
+
     // Remove existing mesh
     if (this.nodesMesh) {
       this.scene.remove(this.nodesMesh);
@@ -146,6 +264,9 @@ export class NetworkRenderer {
   updateNodePositions(nodes: SimulationNode[]): void {
     if (!this.nodesMesh) return;
 
+    // Update stored nodes data for hover detection
+    this.nodesData = [...nodes];
+
     const matrix = new THREE.Matrix4();
 
     for (let i = 0; i < nodes.length; i++) {
@@ -158,6 +279,11 @@ export class NetworkRenderer {
     }
 
     this.nodesMesh.instanceMatrix.needsUpdate = true;
+
+    // Update highlight position if hovering a node
+    if (this.hoveredNodeIndex !== null) {
+      this.updateHighlight(this.nodesData[this.hoveredNodeIndex]);
+    }
   }
 
   pulse(intensity: number = 1): void {
@@ -195,6 +321,10 @@ export class NetworkRenderer {
     this.disposed = true;
     window.removeEventListener('resize', this.handleResize);
 
+    // Remove mouse event listeners
+    this.renderer.domElement.removeEventListener('mousemove', this.handleMouseMove);
+    this.renderer.domElement.removeEventListener('click', this.handleClick);
+
     // Dispose Three.js resources
     if (this.nodesMesh) {
       this.nodesMesh.geometry.dispose();
@@ -204,6 +334,11 @@ export class NetworkRenderer {
     if (this.linesMesh) {
       this.linesMesh.geometry.dispose();
       (this.linesMesh.material as THREE.Material).dispose();
+    }
+
+    if (this.highlightMesh) {
+      this.highlightMesh.geometry.dispose();
+      (this.highlightMesh.material as THREE.Material).dispose();
     }
 
     this.controls.dispose();
