@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/auth';
 import { useDataStore } from '@/stores/data';
 import { useParamsStore } from '@/stores/params';
@@ -12,16 +12,19 @@ import { LoadingScreen } from '@/components/experience';
 import { ExperienceView } from '@/components/experience/ExperienceView';
 
 function WrappedContent() {
-  const searchParams = useSearchParams();
   const router = useRouter();
   const { setAuthenticated, token, user, status: authStatus } = useAuthStore();
   const { setReady: setDataReady, setError, status: dataStatus, model } = useDataStore();
   const { setReady: setParamsReady, setComputing, values: params } = useParamsStore();
   const [initialized, setInitialized] = useState(false);
 
-  // Handle auth data from URL
+  // Handle auth data from URL fragment (more secure than query string)
   useEffect(() => {
-    const authData = searchParams.get('auth');
+    // Check URL fragment for auth data (not visible to server)
+    const hash = window.location.hash;
+    const authMatch = hash.match(/auth=([^&]+)/);
+    const authData = authMatch ? authMatch[1] : null;
+
     if (authData && !token) {
       try {
         const decoded = JSON.parse(atob(authData)) as {
@@ -30,17 +33,15 @@ function WrappedContent() {
         };
         setAuthenticated(decoded.token, decoded.user);
 
-        // Clear the auth param from URL
-        const url = new URL(window.location.href);
-        url.searchParams.delete('auth');
-        window.history.replaceState({}, '', url.toString());
+        // Clear the auth param from URL fragment
+        window.history.replaceState({}, '', window.location.pathname);
       } catch (e) {
         console.error('Failed to parse auth data:', e);
         router.push('/?error=auth_failed');
       }
     }
     setInitialized(true);
-  }, [searchParams, token, setAuthenticated, router]);
+  }, [token, setAuthenticated, router]);
 
   // Fetch data when authenticated
   useEffect(() => {

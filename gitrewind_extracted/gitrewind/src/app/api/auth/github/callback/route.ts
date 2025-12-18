@@ -85,7 +85,8 @@ export async function GET(request: NextRequest) {
 
     const encodedData = Buffer.from(JSON.stringify(authData)).toString('base64');
 
-    return NextResponse.redirect(`${appUrl}/wrapped?auth=${encodedData}`);
+    // Use URL fragment (#) instead of query string to prevent server-side logging
+    return NextResponse.redirect(`${appUrl}/wrapped#auth=${encodedData}`);
   } catch (error) {
     console.error('OAuth error:', error);
     return NextResponse.redirect(`${appUrl}?error=oauth_error`);
