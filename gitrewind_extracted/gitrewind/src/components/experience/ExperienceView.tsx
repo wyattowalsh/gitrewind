@@ -8,7 +8,7 @@ import { MusicPlayer } from '@/components/music/MusicPlayer';
 import { ArtCanvas } from '@/components/art/ArtCanvas';
 import { StatsPanel } from './StatsPanel';
 import { Controls } from './Controls';
-import { ShareDialog, ExportDialog } from '@/components/export';
+import { ShareDialog, ExportDialog, SettingsDialog } from '@/components/export';
 import { ErrorBoundary, ToastContainer } from '@/components/ui';
 import { useKeyboardShortcuts, KEYBOARD_SHORTCUTS } from '@/hooks';
 import { useUIStore } from '@/stores/ui';
@@ -223,6 +223,7 @@ function ExperienceContent({ params, model }: ExperienceViewProps) {
       {/* Dialogs */}
       <ShareDialog params={params} />
       <ExportDialog params={params} />
+      <SettingsDialog />
 
       {/* Toast notifications */}
       <ToastContainer />
